@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>五子棋 Gomoku</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #f5d28d, #f7f0d0);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      text-align: center;
+      background: rgba(255,255,255,0.9);
+      padding: 20px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    #status {
+      margin-bottom: 15px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    canvas {
+      background: #d8a45d;
+      border: 3px solid #5c3b14;
+      border-radius: 10px;
+      cursor: pointer;
+      max-width: 100%;
+    }
+
+    .buttons {
+      margin-top: 15px;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #5c3b14;
+      color: white;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>五子棋 Gomoku</h1>
+    <div id="status">黑棋回合</div>
+    <canvas id="board" width="600" height="600"></canvas>
+
+    <div class="buttons">
+      <button onclick="resetGame()">重新開始</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('status');
+
+    const size = 15;
+    const grid = 40;
+    const offset = 20;
+
+    let board = [];
+    let currentPlayer = 1;
+    let gameOver = false;
+
+    function initBoard() {
+      board = [];
+      for (let i = 0; i < size; i++) {
+        board[i] = [];
+        for (let j = 0; j < size; j++) {
+          board[i][j] = 0;
+        }
+      }
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < size; i++) {
+        ctx.beginPath();
+        ctx.moveTo(offset, offset + i * grid);
+        ctx.lineTo(offset + grid * (size - 1), offset + i * grid);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(offset + i * grid, offset);
+        ctx.lineTo(offset + i * grid, offset + grid * (size - 1));
+        ctx.stroke();
+      }
+
+      for (let x = 0; x < size; x++) {
+        for (let y = 0; y < size; y++) {
+          if (board[x][y] !== 0) {
+            drawPiece(x, y, board[x][y]);
+          }
+        }
+      }
+    }
+
+    function drawPiece(x, y, player) {
+      ctx.beginPath();
+      ctx.arc(offset + x * grid, offset + y * grid, 16, 0, Math.PI * 2);
+
+      if (player === 1) {
+        ctx.fillStyle = 'black';
+      } else {
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = '#333';
+      }
+
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function getMousePos(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener('click', (event) => {
+      if (gameOver) return;
+
+      const pos = getMousePos(event);
+      const x = Math.round((pos.x - offset) / grid);
+      const y = Math.round((pos.y - offset) / grid);
+
+      if (x < 0 || x >= size || y < 0 || y >= size) return;
+      if (board[x][y] !== 0) return;
+
+      board[x][y] = currentPlayer;
+      drawBoard();
+
+      if (checkWin(x, y)) {
+        gameOver = true;
+        statusText.textContent = currentPlayer === 1 ? '黑棋獲勝！' : '白棋獲勝！';
+        return;
+      }
+
+      currentPlayer = currentPlayer === 1 ? 2 : 1;
+      statusText.textContent = currentPlayer === 1 ? '黑棋回合' : '白棋回合';
+    });
+
+    function checkDirection(x, y, dx, dy) {
+      let count = 1;
+
+      for (let i = 1; i < 5; i++) {
+        const nx = x + dx * i;
+        const ny = y + dy * i;
+
+        if (
+          nx >= 0 && nx < size &&
+          ny >= 0 && ny < size &&
+          board[nx][ny] === currentPlayer
+        ) {
+          count++;
+        } else {
+          break;
+        }
+      }
+
+      for (let i = 1; i < 5; i++) {
+        const nx = x - dx * i;
+        const ny = y - dy * i;
+
+        if (
+          nx >= 0 && nx < size &&
+          ny >= 0 && ny < size &&
+          board[nx][ny] === currentPlayer
+        ) {
+          count++;
+        } else {
+          break;
+        }
+      }
+
+      return count >= 5;
+    }
+
+    function checkWin(x, y) {
+      return (
+        checkDirection(x, y, 1, 0) ||
+        checkDirection(x, y, 0, 1) ||
+        checkDirection(x, y, 1, 1) ||
+        checkDirection(x, y, 1, -1)
+      );
+    }
+
+    function resetGame() {
+      currentPlayer = 1;
+      gameOver = false;
+      statusText.textContent = '黑棋回合';
+      initBoard();
+      drawBoard();
+    }
+
+    initBoard();
+    drawBoard();
+  </script>
+</body>
+</html>
