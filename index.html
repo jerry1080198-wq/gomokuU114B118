@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>五子棋 Gomoku</title>
+  <title>五子棋 Gomoku Pro</title>
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: linear-gradient(135deg, #f5d28d, #f7f0d0);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #e6b875, #edd3a4);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -17,28 +17,37 @@
 
     .container {
       text-align: center;
-      background: rgba(255,255,255,0.9);
-      padding: 20px;
+      background: rgba(255,255,255,0.95);
+      padding: 25px;
       border-radius: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.25);
     }
 
     h1 {
-      margin-bottom: 10px;
+      margin: 0 0 10px 0;
+      color: #3e2723;
     }
 
     #status {
       margin-bottom: 15px;
       font-size: 18px;
       font-weight: bold;
+      color: #5d4037;
+    }
+
+    /* 限制 Canvas 容器寬度以利手機響應式縮放 */
+    .canvas-container {
+      max-width: 100%;
+      overflow: hidden;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }
 
     canvas {
-      background: #d8a45d;
-      border: 3px solid #5c3b14;
-      border-radius: 10px;
+      background: #e2b173;
+      border: 4px solid #4e342e;
+      display: block;
       cursor: pointer;
-      max-width: 100%;
     }
 
     .buttons {
@@ -49,17 +58,30 @@
       padding: 10px 20px;
       margin: 5px;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       font-size: 16px;
+      font-weight: bold;
       cursor: pointer;
-      background: #5c3b14;
+      background: #4e342e;
       color: white;
-      transition: 0.2s;
+      transition: all 0.2s ease;
     }
 
     button:hover {
-      transform: scale(1.05);
-      opacity: 0.9;
+      transform: translateY(-2px);
+      background: #5d4037;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #bdbdbd;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
   </style>
 </head>
@@ -67,9 +89,13 @@
   <div class="container">
     <h1>五子棋 Gomoku</h1>
     <div id="status">黑棋回合</div>
-    <canvas id="board" width="600" height="600"></canvas>
+    
+    <div class="canvas-container">
+      <canvas id="board" width="600" height="600"></canvas>
+    </div>
 
     <div class="buttons">
+      <button onclick="undoMove()" id="undoBtn">悔棋</button>
       <button onclick="resetGame()">重新開始</button>
     </div>
   </div>
@@ -78,6 +104,7 @@
     const canvas = document.getElementById('board');
     const ctx = canvas.getContext('2d');
     const statusText = document.getElementById('status');
+    const undoBtn = document.getElementById('undoBtn');
 
     const size = 15;
     const grid = 40;
@@ -86,32 +113,47 @@
     let board = [];
     let currentPlayer = 1;
     let gameOver = false;
+    let moveHistory = []; // 用於記錄落子歷史以實現悔棋功能
 
     function initBoard() {
-      board = [];
-      for (let i = 0; i < size; i++) {
-        board[i] = [];
-        for (let j = 0; j < size; j++) {
-          board[i][j] = 0;
-        }
-      }
+      board = Array.from({ length: size }, () => Array(size).fill(0));
+      moveHistory = [];
+      updateUndoButton();
     }
 
     function drawBoard() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+      
+      // 繪製棋盤格線
+      ctx.strokeStyle = '#5c3b14';
+      ctx.lineWidth = 1;
+      
       for (let i = 0; i < size; i++) {
+        // 橫線
         ctx.beginPath();
         ctx.moveTo(offset, offset + i * grid);
         ctx.lineTo(offset + grid * (size - 1), offset + i * grid);
         ctx.stroke();
 
+        // 直線
         ctx.beginPath();
         ctx.moveTo(offset + i * grid, offset);
         ctx.lineTo(offset + i * grid, offset + grid * (size - 1));
         ctx.stroke();
       }
 
+      // 繪製五子棋/圍棋傳統星位與天元 (15x15 棋盤通常為 9 個點：第 3, 7, 11 條線的交叉點)
+      const stars = [3, 7, 11];
+      ctx.fillStyle = '#5c3b14';
+      for (let x of stars) {
+        for (let y of stars) {
+          ctx.beginPath();
+          ctx.arc(offset + x * grid, offset + y * grid, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 繪製所有棋子
       for (let x = 0; x < size; x++) {
         for (let y = 0; y < size; y++) {
           if (board[x][y] !== 0) {
@@ -119,28 +161,63 @@
           }
         }
       }
+
+      // 在最後一步落子的棋子中心加上小紅點提示
+      if (moveHistory.length > 0) {
+        const lastMove = moveHistory[moveHistory.length - 1];
+        ctx.beginPath();
+        ctx.arc(offset + lastMove.x * grid, offset + lastMove.y * grid, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'red';
+        ctx.fill();
+      }
     }
 
     function drawPiece(x, y, player) {
+      const px = offset + x * grid;
+      const py = offset + y * grid;
+
+      ctx.save();
+      // 設定真實棋子立體陰影
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+
       ctx.beginPath();
-      ctx.arc(offset + x * grid, offset + y * grid, 16, 0, Math.PI * 2);
+      ctx.arc(px, py, 17, 0, Math.PI * 2);
+
+      // 運用放射漸層色（Radial Gradient）做出球體光澤感
+      const radialGrad = ctx.createRadialGradient(px - 4, py - 4, 2, px, py, 17);
 
       if (player === 1) {
-        ctx.fillStyle = 'black';
+        // 黑棋漸層
+        radialGrad.addColorStop(0, '#666');
+        radialGrad.addColorStop(1, '#000');
+        ctx.fillStyle = radialGrad;
+        ctx.fill();
       } else {
-        ctx.fillStyle = 'white';
-        ctx.strokeStyle = '#333';
+        // 白棋漸層與外圍細線
+        radialGrad.addColorStop(0, '#fff');
+        radialGrad.addColorStop(0.8, '#eee');
+        radialGrad.addColorStop(1, '#ccc');
+        ctx.fillStyle = radialGrad;
+        ctx.fill();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'; // 白棋陰影稍微減淡
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-
-      ctx.fill();
-      ctx.stroke();
+      ctx.restore();
     }
 
     function getMousePos(event) {
       const rect = canvas.getBoundingClientRect();
+      // 修正 Canvas 縮放後的座標對齊問題，確保高解析度螢幕點擊精準
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
       return {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
       };
     }
 
@@ -151,20 +228,26 @@
       const x = Math.round((pos.x - offset) / grid);
       const y = Math.round((pos.y - offset) / grid);
 
+      // 嚴格邊界落子防呆判定
       if (x < 0 || x >= size || y < 0 || y >= size) return;
       if (board[x][y] !== 0) return;
 
+      // 落子並推入歷史紀錄
       board[x][y] = currentPlayer;
+      moveHistory.push({ x, y, player: currentPlayer });
+
       drawBoard();
 
       if (checkWin(x, y)) {
         gameOver = true;
-        statusText.textContent = currentPlayer === 1 ? '黑棋獲勝！' : '白棋獲勝！';
+        statusText.textContent = currentPlayer === 1 ? '黑棋獲勝！ 🎉' : '白棋獲勝！ 🎉';
+        updateUndoButton();
         return;
       }
 
       currentPlayer = currentPlayer === 1 ? 2 : 1;
       statusText.textContent = currentPlayer === 1 ? '黑棋回合' : '白棋回合';
+      updateUndoButton();
     });
 
     function checkDirection(x, y, dx, dy) {
@@ -173,31 +256,17 @@
       for (let i = 1; i < 5; i++) {
         const nx = x + dx * i;
         const ny = y + dy * i;
-
-        if (
-          nx >= 0 && nx < size &&
-          ny >= 0 && ny < size &&
-          board[nx][ny] === currentPlayer
-        ) {
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && board[nx][ny] === currentPlayer) {
           count++;
-        } else {
-          break;
-        }
+        } else { break; }
       }
 
       for (let i = 1; i < 5; i++) {
         const nx = x - dx * i;
         const ny = y - dy * i;
-
-        if (
-          nx >= 0 && nx < size &&
-          ny >= 0 && ny < size &&
-          board[nx][ny] === currentPlayer
-        ) {
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && board[nx][ny] === currentPlayer) {
           count++;
-        } else {
-          break;
-        }
+        } else { break; }
       }
 
       return count >= 5;
@@ -210,6 +279,26 @@
         checkDirection(x, y, 1, 1) ||
         checkDirection(x, y, 1, -1)
       );
+    }
+
+    function undoMove() {
+      // 若沒有棋子或遊戲已結束則不執行悔棋
+      if (moveHistory.length === 0 || gameOver) return;
+
+      const lastMove = moveHistory.pop();
+      board[lastMove.x][lastMove.y] = 0; // 將棋盤格還原為空
+
+      // 切換回上一個玩家
+      currentPlayer = lastMove.player;
+      statusText.textContent = currentPlayer === 1 ? '黑棋回合' : '白棋回合';
+
+      drawBoard();
+      updateUndoButton();
+    }
+
+    function updateUndoButton() {
+      // 動態更新悔棋按鈕狀態：開局時或遊戲結束時，禁用按鈕
+      undoBtn.disabled = moveHistory.length === 0 || gameOver;
     }
 
     function resetGame() {
